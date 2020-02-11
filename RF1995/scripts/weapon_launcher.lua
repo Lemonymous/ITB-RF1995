@@ -152,17 +152,6 @@ function lmn_Minelayer_Launcher:FireWeapon(p1, p2, useArtillery, isTipImage)
 	this.effectBurst.Add(effect, p1, "lmn_Emitter_Minelayer_Launcher_Small", DIR_NONE, isTipImage)
 	this.effectBurst.Add(effect, p1, "lmn_Emitter_Minelayer_Launcher_Small_Front", DIR_NONE, isTipImage)
 	
-	-- if board is busy, wait until it is resolved.
-	if Board:GetBusyState() ~= 0 then
-		effect:AddScript([[
-			local p1 = ]].. p1:GetString() ..[[;
-			local p2 = ]].. p2:GetString() ..[[;
-			_G[']].. self.Self ..[[']:FireWeapon(p1, p2, ]].. tostring(useArtillery) ..",".. tostring(isTipImage) ..[[);
-		]])
-		Board:AddEffect(effect)
-		return
-	end
-	
 	local id = shooter:GetId()
 	local dir = GetDirection(p2 - p1)
 	local target
@@ -314,11 +303,20 @@ function lmn_Minelayer_Launcher:FireWeapon(p1, p2, useArtillery, isTipImage)
 	-------------------
 	if this.attacks[id] > 0 then
 		
-		effect:AddScript([[
-			local p1 = ]].. p1:GetString() ..[[;
-			local p2 = ]].. p2:GetString() ..[[;
-			_G[']].. self.Self ..[[']:FireWeapon(p1, p2, ]].. tostring(useArtillery) ..",".. tostring(isTipImage) ..[[);
-		]])
+		effect:AddScript(string.format([[
+			modApi:conditionalHook(
+				function()
+					return not Board or not Board:IsBusy();
+				end,
+				function()
+					if Board then
+						local p1 = %s;
+						local p2 = %s;
+						_G[%q]:FireWeapon(p1, p2, %s, %s);
+					end
+				end
+			)
+		]], p1:GetString(), p2:GetString(), self.Self, tostring(useArtillery), tostring(isTipImage)))
 	else
 		------------------
 		-- end resolution

@@ -105,45 +105,43 @@ function lmn_Tank_Cannon:GetSkillEffect(p1, p2, parentSkill, isTipImage, isScrip
 	
 	if isScript then
 		-- GetSkillEffect called recursively.
-		if Board:GetBusyState() == 0 then
-			ret.iOwner = shooter:GetId()
-			ret.piOrigin = p1
+		ret.iOwner = shooter:GetId()
+		ret.piOrigin = p1
+		
+		local target = self:GetProjectileEnd(p1, p2)
+		local pawn = Board:GetPawn(target)
+		local attacksLeft = this.attacks[id]
+		local attacks = 1
+		
+		----------------------
+		-- attack calculation
+		----------------------
+		if not Board:IsBlocked(target, PATH_PROJECTILE) then
+			-- unload shots on empty tiles.
+			attacks = attacksLeft
+		end
+		
+		attacks = math.min(attacksLeft, attacks)
+		this.attacks[id] = this.attacks[id] - attacks
+		
+		---------------------
+		-- damage resolution
+		---------------------
+		for i = 1, attacks do
+			ret:AddSound("/weapons/stock_cannons")
 			
-			local target = self:GetProjectileEnd(p1, p2)
-			local pawn = Board:GetPawn(target)
-			local attacksLeft = this.attacks[id]
-			local attacks = 1
+			local weapon = SpaceDamage(target, self.Damage)
+			weapon.iPush = self.Push and dir or DIR_NONE
+			weapon.sSound = "/impact/generic/explosion"
+			weapon.sScript = "Board:AddAnimation(".. target:GetString() ..", 'explopush1_".. dir .."', NO_DELAY)"
 			
-			----------------------
-			-- attack calculation
-			----------------------
-			if not Board:IsBlocked(target, PATH_PROJECTILE) then
-				-- unload shots on empty tiles.
-				attacks = attacksLeft
-			end
+			this.worldConstants.SetSpeed(ret, 1)
+			ret:AddProjectile(weapon, "effects/lmn_tank_shot_cannon", NO_DELAY)
+			this.worldConstants.ResetSpeed(ret)
 			
-			attacks = math.min(attacksLeft, attacks)
-			this.attacks[id] = this.attacks[id] - attacks
-			
-			---------------------
-			-- damage resolution
-			---------------------
-			for i = 1, attacks do
-				ret:AddSound("/weapons/stock_cannons")
-				
-				local weapon = SpaceDamage(target, self.Damage)
-				weapon.iPush = self.Push and dir or DIR_NONE
-				weapon.sSound = "/impact/generic/explosion"
-				weapon.sScript = "Board:AddAnimation(".. target:GetString() ..", 'explopush1_".. dir .."', NO_DELAY)"
-				
-				this.worldConstants.SetSpeed(ret, 1)
-				ret:AddProjectile(weapon, "effects/lmn_tank_shot_cannon", NO_DELAY)
-				this.worldConstants.ResetSpeed(ret)
-				
-				-- minimum delay between shots.
-				-- can take longer due to board being resolved.
-				ret:AddDelay(0.3)
-			end
+			-- minimum delay between shots.
+			-- can take longer due to board being resolved.
+			ret:AddDelay(0.3)
 		end
 	else
 		-- GetSkillEffect called by the game.
@@ -214,11 +212,23 @@ function lmn_Tank_Cannon:GetSkillEffect(p1, p2, parentSkill, isTipImage, isScrip
 		-------------------
 		-- continue attack
 		-------------------
-		ret:AddScript([[
-			local p1 = ]].. p1:GetString() ..[[;
-			local p2 = ]].. p2:GetString() ..[[;
-			Board:AddEffect(_G[']].. self.Self ..[[']:GetSkillEffect(p1, p2, nil, ]].. tostring(isTipImage) ..[[, true));
-		]])
+		ret:AddScript(string.format([[
+			modApi:conditionalHook(
+				function()
+					return not Board or not Board:IsBusy();
+				end,
+				function()
+					if Board then
+						LOG("shoot again");
+						local p1 = %s;
+						local p2 = %s;
+						Board:AddEffect(_G[%q]:GetSkillEffect(p1, p2, nil, %s, true));
+					else
+						LOG("don't shoot again");
+					end
+				end
+			)
+		]], p1:GetString(), p2:GetString(), self.Self, tostring(isTipImage)))
 		
 	elseif isTipImage then
 		ret:AddDelay(1.3)
